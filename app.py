@@ -63,15 +63,23 @@ def get_driver():
     
     try:
         if os.getenv('RENDER'):
-            # Sprawdź lokalizację chromium i chromedriver
-            chromium_path = subprocess.check_output(['which', 'chromium']).decode().strip()
-            chromedriver_path = subprocess.check_output(['which', 'chromedriver']).decode().strip()
+            # Konfiguracja dla Render
+            chrome_options.binary_location = '/usr/bin/chromium-browser'
+            service = Service(executable_path='/usr/bin/chromedriver')
             
-            print(f"Chromium path: {chromium_path}")
-            print(f"ChromeDriver path: {chromedriver_path}")
+            print(f"Chrome binary location: {chrome_options.binary_location}")
+            print(f"ChromeDriver path: {service.path}")
             
-            chrome_options.binary_location = chromium_path
-            service = Service(executable_path=chromedriver_path)
+            # Sprawdź czy pliki istnieją
+            if os.path.exists(chrome_options.binary_location):
+                print(f"Chromium browser exists at {chrome_options.binary_location}")
+            else:
+                print(f"Chromium browser NOT FOUND at {chrome_options.binary_location}")
+                
+            if os.path.exists(service.path):
+                print(f"ChromeDriver exists at {service.path}")
+            else:
+                print(f"ChromeDriver NOT FOUND at {service.path}")
         else:
             # Lokalna konfiguracja
             service = Service(ChromeDriverManager().install())
@@ -86,8 +94,8 @@ def get_driver():
                 print("Zawartość /usr/bin:")
                 print(subprocess.check_output(['ls', '-l', '/usr/bin']).decode())
                 
-                print("\nWersja Chromium:")
-                print(subprocess.check_output(['chromium', '--version']).decode())
+                print("\nSprawdzanie dostępnych przeglądarek:")
+                print(subprocess.check_output(['ls', '-l', '/usr/bin/chromium*']).decode())
                 
                 print("\nWersja ChromeDriver:")
                 print(subprocess.check_output(['chromedriver', '--version']).decode())

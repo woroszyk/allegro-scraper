@@ -4,10 +4,9 @@ services:
     env: python
     buildCommand: |
       apt-get update
-      apt-get install -y chromium chromium-driver chromium-browser
-      which chromium
+      apt-get install -y chromium-browser chromium-chromedriver
+      ls -l /usr/bin/chromium*
       which chromedriver
-      chromium --version
       chromedriver --version
       pip install -r requirements.txt
     startCommand: gunicorn app:app -c gunicorn_config.py
@@ -18,4 +17,6 @@ services:
         value: "true"
       - key: PYTHONUNBUFFERED
         value: "1"
+      - key: DISPLAY
+        value: ":99"
     autoDeploy: true
