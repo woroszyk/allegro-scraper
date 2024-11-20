@@ -4,8 +4,8 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.core.os_manager import ChromeType
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.chrome.webdriver import WebDriver
 from PIL import Image
 import io
 import os
@@ -56,50 +56,28 @@ def get_image_info(img_url):
 def get_driver():
     chrome_options = Options()
     chrome_options.add_argument('--no-sandbox')
-    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--headless=new')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--disable-software-rasterizer')
     
     try:
-        if os.getenv('RENDER'):
-            chrome_binary = os.getenv('CHROME_BIN', '/usr/bin/google-chrome')
-            chromedriver_path = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
-            
-            print(f"Chrome binary location: {chrome_binary}")
-            print(f"ChromeDriver path: {chromedriver_path}")
-            
-            # Sprawdź czy pliki istnieją
-            if os.path.exists(chrome_binary):
-                print(f"Chrome exists at {chrome_binary}")
-                print(f"Chrome version: {subprocess.check_output([chrome_binary, '--version']).decode()}")
-            else:
-                print(f"Chrome NOT FOUND at {chrome_binary}")
-                
-            if os.path.exists(chromedriver_path):
-                print(f"ChromeDriver exists at {chromedriver_path}")
-                print(f"ChromeDriver version: {subprocess.check_output([chromedriver_path, '--version']).decode()}")
-            else:
-                print(f"ChromeDriver NOT FOUND at {chromedriver_path}")
-            
-            chrome_options.binary_location = chrome_binary
-            service = Service(executable_path=chromedriver_path)
-        else:
-            # Lokalna konfiguracja
-            service = Service(ChromeDriverManager().install())
-        
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Używamy wbudowanego selenium-manager
+        driver = webdriver.Chrome(options=chrome_options)
+        print("Chrome został zainicjalizowany pomyślnie")
         return driver
     except Exception as e:
         print(f"Błąd podczas inicjalizacji Chrome: {str(e)}")
         if os.getenv('RENDER'):
             try:
-                print("\nZawartość /usr/bin:")
-                print(subprocess.check_output(['ls', '-l', '/usr/bin/google*']).decode())
+                print("\nInformacje o systemie:")
+                print(subprocess.check_output(['uname', '-a']).decode())
                 
-                print("\nZawartość /usr/local/bin:")
-                print(subprocess.check_output(['ls', '-l', '/usr/local/bin/chrome*']).decode())
+                print("\nZawartość katalogu domowego:")
+                print(subprocess.check_output(['ls', '-la', os.path.expanduser('~')]).decode())
+                
+                print("\nZmienne środowiskowe:")
+                print(subprocess.check_output(['env']).decode())
             except Exception as debug_e:
                 print(f"Błąd podczas zbierania informacji diagnostycznych: {str(debug_e)}")
         raise
