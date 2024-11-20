@@ -24,6 +24,7 @@ from selenium.common.exceptions import TimeoutException
 from io import BytesIO
 import threading
 import queue
+import random
 
 app = Flask(__name__)
 
@@ -74,9 +75,24 @@ def get_driver():
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     
+    # Dodaj nagłówki użytkownika
+    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36')
+    chrome_options.add_argument('--lang=pl-PL')
+    
+    # Dodaj dodatkowe nagłówki
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
     try:
-        # Używamy wbudowanego selenium-manager
         driver = webdriver.Chrome(options=chrome_options)
+        
+        # Usuń webdriver info
+        driver.execute_cdp_cmd('Network.setUserAgentOverride', {
+            "userAgent": 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
+        })
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        
         print("Chrome został zainicjalizowany pomyślnie")
         return driver
     except Exception as e:
@@ -104,6 +120,19 @@ def process_images(url, session_id):
             update_progress(session_id, 'cookies', 10, 'Akceptowanie cookies Allegro...')
             driver.get('https://allegro.pl')
             time.sleep(2)
+            
+            # Sprawdź czy jest captcha
+            try:
+                captcha_iframe = WebDriverWait(driver, 5).until(
+                    EC.presence_of_element_located((By.XPATH, "//iframe[contains(@src, 'captcha')]"))
+                )
+                if captcha_iframe:
+                    error_message = "Wykryto captcha. Spróbuj ponownie za kilka minut."
+                    update_progress(session_id, 'error', 100, error_message)
+                    return []
+            except:
+                pass  # Brak captcha, kontynuuj
+                
             try:
                 # Nowa metoda akceptacji cookies
                 cookie_button = WebDriverWait(driver, 10).until(
@@ -125,36 +154,66 @@ def process_images(url, session_id):
         # Ładujemy stronę
         update_progress(session_id, 'loading', 20, 'Ładowanie strony...')
         print(f"Ładowanie strony: {url}")
+        
+        # Dodaj losowe opóźnienie
+        time.sleep(random.uniform(2, 4))
         driver.get(url)
+        
+        # Sprawdź czy jest captcha na stronie produktu
+        try:
+            captcha_iframe = WebDriverWait(driver, 5).until(
+                EC.presence_of_element_located((By.XPATH, "//iframe[contains(@src, 'captcha')]"))
+            )
+            if captcha_iframe:
+                error_message = "Wykryto captcha. Spróbuj ponownie za kilka minut."
+                update_progress(session_id, 'error', 100, error_message)
+                return []
+        except:
+            pass  # Brak captcha, kontynuuj
         
         # Czekamy na załadowanie głównych elementów
         update_progress(session_id, 'waiting', 30, 'Czekanie na załadowanie elementów strony...')
-        try:
-            WebDriverWait(driver, 15).until(
-                EC.presence_of_element_located((By.TAG_NAME, "img"))
-            )
-        except TimeoutException:
-            print("Timeout podczas oczekiwania na obrazy")
+        
+        # Czekaj na konkretne selektory Allegro
+        if 'allegro.pl' in url:
+            try:
+                # Czekaj na galerię obrazów
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "[data-box-name='Gallery']"))
+                )
+                # Czekaj na główny obraz
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "[data-role='gallery-viewer']"))
+                )
+            except TimeoutException:
+                print("Timeout podczas oczekiwania na elementy Allegro")
+        else:
+            try:
+                WebDriverWait(driver, 15).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "img"))
+                )
+            except TimeoutException:
+                print("Timeout podczas oczekiwania na obrazy")
         
         # Dodatkowe oczekiwanie na dynamiczne elementy
-        time.sleep(5)
+        time.sleep(random.uniform(3, 5))
         
         # Przewijamy stronę
         update_progress(session_id, 'scrolling', 40, 'Przewijanie strony w poszukiwaniu obrazów...')
         print("Przewijanie strony...")
         
-        # Przewijanie z większą liczbą powtórzeń i dłuższymi przerwami
+        # Przewijanie z większą liczbą powtórzeń i losowymi przerwami
         last_height = driver.execute_script("return document.body.scrollHeight")
-        for i in range(5):  # Zwiększamy liczbę przewinięć
+        for i in range(5):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(2)  # Dłuższe oczekiwanie
+            time.sleep(random.uniform(1.5, 2.5))
             new_height = driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 break
             last_height = new_height
             
         driver.execute_script("window.scrollTo(0, 0);")
-        time.sleep(2)
+        time.sleep(random.uniform(1, 2))
         
         # Zbieramy obrazy z różnych selektorów
         update_progress(session_id, 'collecting', 50, 'Zbieranie elementów obrazów...')
@@ -162,14 +221,20 @@ def process_images(url, session_id):
         
         img_elements = []
         
+        if 'allegro.pl' in url:
+            # Specjalne selektory dla Allegro
+            img_elements.extend(driver.find_elements(By.CSS_SELECTOR, "[data-role='gallery-viewer'] img"))
+            img_elements.extend(driver.find_elements(By.CSS_SELECTOR, "[data-box-name='Gallery'] img"))
+            img_elements.extend(driver.find_elements(By.CSS_SELECTOR, "[data-role='gallery-viewer-image']"))
+        
         # Standardowe obrazy
         img_elements.extend(driver.find_elements(By.TAG_NAME, 'img'))
         
-        # Obrazy w tle (style background-image)
+        # Obrazy w tle
         background_elements = driver.find_elements(By.XPATH, "//*[contains(@style, 'background-image')]")
         
         # Szukamy obrazów w różnych atrybutach
-        data_img_elements = driver.find_elements(By.XPATH, "//*[@data-src or @data-lazy or @data-original]")
+        data_img_elements = driver.find_elements(By.XPATH, "//*[@data-src or @data-lazy or @data-original or @data-image]")
         
         total_elements = len(img_elements) + len(background_elements) + len(data_img_elements)
         print(f"Znaleziono {total_elements} potencjalnych elementów z obrazami")
@@ -235,7 +300,7 @@ def process_images(url, session_id):
         # Przetwarzanie elementów z data-atrybutami
         for elem in data_img_elements:
             try:
-                for attr in ['data-src', 'data-lazy', 'data-original']:
+                for attr in ['data-src', 'data-lazy', 'data-original', 'data-image']:
                     url = elem.get_attribute(attr)
                     if url:
                         normalized_url = normalize_url(url)
