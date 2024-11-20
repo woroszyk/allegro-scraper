@@ -60,26 +60,31 @@ def get_driver():
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--disable-software-rasterizer')
     
     try:
         if os.getenv('RENDER'):
-            # Konfiguracja dla Render
-            chrome_options.binary_location = '/usr/bin/chromium-browser'
-            service = Service(executable_path='/usr/bin/chromedriver')
+            chrome_binary = os.getenv('CHROME_BIN', '/usr/bin/google-chrome')
+            chromedriver_path = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
             
-            print(f"Chrome binary location: {chrome_options.binary_location}")
-            print(f"ChromeDriver path: {service.path}")
+            print(f"Chrome binary location: {chrome_binary}")
+            print(f"ChromeDriver path: {chromedriver_path}")
             
             # Sprawdź czy pliki istnieją
-            if os.path.exists(chrome_options.binary_location):
-                print(f"Chromium browser exists at {chrome_options.binary_location}")
+            if os.path.exists(chrome_binary):
+                print(f"Chrome exists at {chrome_binary}")
+                print(f"Chrome version: {subprocess.check_output([chrome_binary, '--version']).decode()}")
             else:
-                print(f"Chromium browser NOT FOUND at {chrome_options.binary_location}")
+                print(f"Chrome NOT FOUND at {chrome_binary}")
                 
-            if os.path.exists(service.path):
-                print(f"ChromeDriver exists at {service.path}")
+            if os.path.exists(chromedriver_path):
+                print(f"ChromeDriver exists at {chromedriver_path}")
+                print(f"ChromeDriver version: {subprocess.check_output([chromedriver_path, '--version']).decode()}")
             else:
-                print(f"ChromeDriver NOT FOUND at {service.path}")
+                print(f"ChromeDriver NOT FOUND at {chromedriver_path}")
+            
+            chrome_options.binary_location = chrome_binary
+            service = Service(executable_path=chromedriver_path)
         else:
             # Lokalna konfiguracja
             service = Service(ChromeDriverManager().install())
@@ -89,16 +94,12 @@ def get_driver():
     except Exception as e:
         print(f"Błąd podczas inicjalizacji Chrome: {str(e)}")
         if os.getenv('RENDER'):
-            # Dodatkowe informacje diagnostyczne
             try:
-                print("Zawartość /usr/bin:")
-                print(subprocess.check_output(['ls', '-l', '/usr/bin']).decode())
+                print("\nZawartość /usr/bin:")
+                print(subprocess.check_output(['ls', '-l', '/usr/bin/google*']).decode())
                 
-                print("\nSprawdzanie dostępnych przeglądarek:")
-                print(subprocess.check_output(['ls', '-l', '/usr/bin/chromium*']).decode())
-                
-                print("\nWersja ChromeDriver:")
-                print(subprocess.check_output(['chromedriver', '--version']).decode())
+                print("\nZawartość /usr/local/bin:")
+                print(subprocess.check_output(['ls', '-l', '/usr/local/bin/chrome*']).decode())
             except Exception as debug_e:
                 print(f"Błąd podczas zbierania informacji diagnostycznych: {str(debug_e)}")
         raise
