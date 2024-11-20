@@ -50,22 +50,24 @@ def get_image_info(img_url):
         print(f"Błąd podczas przetwarzania obrazu {img_url}: {str(e)}")
         return None
 
-def process_images(url):
+def get_driver():
     chrome_options = Options()
-    chrome_options.add_argument('--headless=new')
     chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--headless')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
+    chrome_options.add_argument('--disable-software-rasterizer')
+    chrome_options.add_argument('--remote-debugging-port=9222')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.add_argument('--disable-web-security')
-    chrome_options.add_argument('--ignore-certificate-errors')
-    chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36')
+    chrome_options.binary_location = os.getenv('CHROME_BIN', '/usr/bin/chromium')
     
-    driver = None
+    service = Service(executable_path=os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver'))
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    return driver
+
+def process_images(url):
+    driver = get_driver()
     try:
-        driver = webdriver.Chrome(options=chrome_options)
-        driver.set_page_load_timeout(30)
-        
         # Dodaj obsługę cookies dla Allegro
         if 'allegro.pl' in url:
             driver.get('https://allegro.pl')
@@ -140,11 +142,10 @@ def process_images(url):
         return []
         
     finally:
-        if driver:
-            try:
-                driver.quit()
-            except Exception as e:
-                print(f"Błąd podczas zamykania przeglądarki: {str(e)}")
+        try:
+            driver.quit()
+        except Exception as e:
+            print(f"Błąd podczas zamykania przeglądarki: {str(e)}")
     
     # Przetwarzamy znalezione URL-e
     results = []

@@ -2,9 +2,15 @@ services:
   - type: web
     name: allegro-scraper
     env: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: |
+      pip install -r requirements.txt
+      apt-get update && apt-get install -y chromium chromium-driver
     startCommand: gunicorn app:app -c gunicorn_config.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.0
+      - key: CHROME_BIN
+        value: /usr/bin/chromium
+      - key: CHROMEDRIVER_PATH
+        value: /usr/bin/chromedriver
     autoDeploy: true
