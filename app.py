@@ -228,18 +228,6 @@ def process_images(url, session_id):
         except Exception as e:
             print(f"Błąd podczas zamykania przeglądarki: {str(e)}")
 
-@app.route('/progress/<session_id>')
-def get_progress(session_id):
-    return jsonify(progress_data.get(session_id, {
-        'status': 'unknown',
-        'progress': 0,
-        'message': 'Brak danych o postępie'
-    }))
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 @app.route('/analyze', methods=['POST'])
 def analyze():
     url = request.json.get('url')
@@ -250,18 +238,44 @@ def analyze():
     session_id = str(time.time())
     
     try:
-        # Uruchom proces w osobnym wątku
+        # Uruchom proces analizy
         results = process_images(url, session_id)
+        
+        # Poczekaj na zakończenie przetwarzania
+        time.sleep(1)  # Daj czas na ostatnią aktualizację statusu
+        
+        if not results:
+            error_message = "Nie udało się przetworzyć strony"
+            update_progress(session_id, 'error', 100, error_message)
+            return jsonify({'error': error_message}), 500
         
         return jsonify({
             'session_id': session_id,
             'images': results,
-            'count': len(results)
+            'count': len(results),
+            'status': 'completed'
         })
     except Exception as e:
         error_message = str(e)
         update_progress(session_id, 'error', 100, f'Błąd: {error_message}')
-        return jsonify({'error': error_message}), 500
+        return jsonify({
+            'session_id': session_id,
+            'error': error_message,
+            'status': 'error'
+        }), 500
+
+@app.route('/progress/<session_id>')
+def get_progress(session_id):
+    progress_info = progress_data.get(session_id, {
+        'status': 'unknown',
+        'progress': 0,
+        'message': 'Brak danych o postępie'
+    })
+    return jsonify(progress_info)
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/download', methods=['POST'])
 def download():

@@ -53,25 +53,36 @@ document.addEventListener('DOMContentLoaded', function() {
             });
 
             const data = await response.json();
+            
             if (response.ok) {
                 // Rozpocznij monitorowanie postępu
                 if (progressInterval) {
                     clearInterval(progressInterval);
                 }
-                progressInterval = setInterval(() => {
-                    updateProgress(data.session_id)
-                        .then(progressData => {
+                
+                if (data.status === 'completed') {
+                    displayResults(data.images);
+                    hideProgress();
+                } else {
+                    progressInterval = setInterval(async () => {
+                        try {
+                            const progressData = await updateProgress(data.session_id);
                             if (progressData.status === 'completed') {
+                                clearInterval(progressInterval);
                                 displayResults(data.images);
                                 hideProgress();
+                            } else if (progressData.status === 'error') {
+                                clearInterval(progressInterval);
+                                showError(progressData.message);
+                                hideProgress();
                             }
-                        })
-                        .catch(error => {
+                        } catch (error) {
                             clearInterval(progressInterval);
                             showError(error.message || 'Wystąpił błąd podczas analizy strony');
                             hideProgress();
-                        });
-                }, 500);
+                        }
+                    }, 500);
+                }
             } else {
                 showError(data.error || 'Wystąpił błąd podczas analizy strony');
                 hideProgress();
