@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, Response, stream_with_context
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
@@ -16,13 +16,26 @@ import base64
 import tempfile
 import zipfile
 import time
+import json
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import TimeoutException
 from io import BytesIO
+import threading
+import queue
 
 app = Flask(__name__)
+
+# Słownik do przechowywania postępu dla każdej sesji
+progress_data = {}
+
+def update_progress(session_id, status, progress, message):
+    progress_data[session_id] = {
+        'status': status,
+        'progress': progress,
+        'message': message
+    }
 
 def get_image_info(img_url):
     try:
@@ -82,11 +95,13 @@ def get_driver():
                 print(f"Błąd podczas zbierania informacji diagnostycznych: {str(debug_e)}")
         raise
 
-def process_images(url):
+def process_images(url, session_id):
+    update_progress(session_id, 'starting', 0, 'Inicjalizacja przeglądarki...')
     driver = get_driver()
     try:
         # Dodaj obsługę cookies dla Allegro
         if 'allegro.pl' in url:
+            update_progress(session_id, 'cookies', 10, 'Akceptowanie cookies Allegro...')
             driver.get('https://allegro.pl')
             time.sleep(2)
             try:
@@ -109,22 +124,28 @@ def process_images(url):
                     print(f"Nie udało się zaakceptować cookies alternatywną metodą: {str(e2)}")
         
         # Ładujemy stronę
+        update_progress(session_id, 'loading', 20, 'Ładowanie strony...')
         print(f"Ładowanie strony: {url}")
         driver.get(url)
         time.sleep(3)
         
-        # Przewijamy stronę kilka razy
+        # Przewijamy stronę
+        update_progress(session_id, 'scrolling', 30, 'Przewijanie strony w poszukiwaniu obrazów...')
         print("Przewijanie strony...")
         for i in range(3):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1)
         driver.execute_script("window.scrollTo(0, 0);")
         
-        # Zbieramy wszystkie obrazy
+        # Zbieramy obrazy
+        update_progress(session_id, 'collecting', 40, 'Zbieranie elementów obrazów...')
         print("Zbieranie obrazów...")
         img_elements = driver.find_elements(By.TAG_NAME, 'img')
-        print(f"Znaleziono {len(img_elements)} elementów img")
-        img_urls = set()  # Używamy set() zamiast listy, aby uniknąć duplikatów
+        total_images = len(img_elements)
+        print(f"Znaleziono {total_images} elementów img")
+        img_urls = set()
+
+        update_progress(session_id, 'processing', 50, f'Przetwarzanie {total_images} znalezionych obrazów...')
         
         def normalize_url(url):
             if not url or url.startswith('data:'):
@@ -136,11 +157,14 @@ def process_images(url):
                 except Exception as e:
                     print(f"Błąd podczas normalizacji URL: {str(e)}")
                     return None
-            return url.split('?')[0]  # Usuwamy parametry URL
-        
-        for img in img_elements:
+            return url.split('?')[0]
+
+        # Przetwarzanie obrazów z paskiem postępu
+        for i, img in enumerate(img_elements):
+            progress = 50 + (i / total_images * 25)  # Od 50% do 75%
+            update_progress(session_id, 'processing', progress, f'Przetwarzanie obrazu {i+1} z {total_images}...')
+            
             try:
-                # Sprawdzamy różne atrybuty obrazu
                 src = img.get_attribute('src')
                 data_src = img.get_attribute('data-src')
                 data_original = img.get_attribute('data-original')
@@ -153,7 +177,6 @@ def process_images(url):
                         if normalized_url:
                             img_urls.add(normalized_url)
                 
-                # Obsługa srcset i data-srcset
                 for srcset_attr in [srcset, data_srcset]:
                     if srcset_attr:
                         for srcset_url in srcset_attr.split(','):
@@ -168,9 +191,35 @@ def process_images(url):
                 continue
         
         print(f"Znaleziono {len(img_urls)} unikalnych URL-i obrazów")
-    
+        
+        # Pobieranie i analiza obrazów
+        results = []
+        total_urls = len(img_urls)
+        update_progress(session_id, 'downloading', 75, f'Pobieranie i analiza {total_urls} unikalnych obrazów...')
+        
+        for i, img_url in enumerate(img_urls):
+            progress = 75 + (i / total_urls * 20)  # Od 75% do 95%
+            update_progress(session_id, 'downloading', progress, f'Pobieranie i analiza obrazu {i+1} z {total_urls}...')
+            
+            try:
+                result = get_image_info(img_url)
+                if result:
+                    results.append(result)
+            except Exception as e:
+                print(f"Błąd podczas przetwarzania URL-a {img_url}: {str(e)}")
+                continue
+
+        update_progress(session_id, 'finishing', 95, 'Finalizacja wyników...')
+        print(f"Pomyślnie przetworzono {len(results)} obrazów")
+        
+        # Końcowy status
+        update_progress(session_id, 'completed', 100, f'Zakończono! Znaleziono {len(results)} obrazów.')
+        return results
+        
     except Exception as e:
-        print(f"Błąd podczas przetwarzania strony: {str(e)}")
+        error_message = f"Błąd podczas przetwarzania strony: {str(e)}"
+        update_progress(session_id, 'error', 100, error_message)
+        print(error_message)
         return []
         
     finally:
@@ -178,21 +227,14 @@ def process_images(url):
             driver.quit()
         except Exception as e:
             print(f"Błąd podczas zamykania przeglądarki: {str(e)}")
-    
-    # Przetwarzamy znalezione URL-e
-    results = []
-    print("Przetwarzanie znalezionych obrazów...")
-    for img_url in img_urls:
-        try:
-            result = get_image_info(img_url)
-            if result:
-                results.append(result)
-        except Exception as e:
-            print(f"Błąd podczas przetwarzania URL-a {img_url}: {str(e)}")
-            continue
-    
-    print(f"Pomyślnie przetworzono {len(results)} obrazów")
-    return results
+
+@app.route('/progress/<session_id>')
+def get_progress(session_id):
+    return jsonify(progress_data.get(session_id, {
+        'status': 'unknown',
+        'progress': 0,
+        'message': 'Brak danych o postępie'
+    }))
 
 @app.route('/')
 def index():
@@ -204,14 +246,22 @@ def analyze():
     if not url:
         return jsonify({'error': 'URL is required'}), 400
     
+    # Generuj unikalny identyfikator sesji
+    session_id = str(time.time())
+    
     try:
-        results = process_images(url)
+        # Uruchom proces w osobnym wątku
+        results = process_images(url, session_id)
+        
         return jsonify({
+            'session_id': session_id,
             'images': results,
             'count': len(results)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        error_message = str(e)
+        update_progress(session_id, 'error', 100, f'Błąd: {error_message}')
+        return jsonify({'error': error_message}), 500
 
 @app.route('/download', methods=['POST'])
 def download():

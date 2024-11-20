@@ -8,6 +8,32 @@ document.addEventListener('DOMContentLoaded', function() {
     const downloadSelected = document.getElementById('downloadSelected');
     const formatSelect = document.getElementById('formatSelect');
     const resolutionSort = document.getElementById('resolutionSort');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = progressSection.querySelector('.progress-bar');
+    const progressStatus = progressSection.querySelector('.progress-status');
+
+    let progressInterval = null;
+
+    function updateProgress(sessionId) {
+        return fetch(`/progress/${sessionId}`)
+            .then(response => response.json())
+            .then(data => {
+                progressBar.style.width = `${data.progress}%`;
+                progressBar.setAttribute('aria-valuenow', data.progress);
+                progressStatus.textContent = data.message;
+                
+                if (data.status === 'completed' || data.status === 'error') {
+                    if (progressInterval) {
+                        clearInterval(progressInterval);
+                        progressInterval = null;
+                    }
+                    if (data.status === 'error') {
+                        throw new Error(data.message);
+                    }
+                }
+                return data;
+            });
+    }
 
     analyzeBtn.addEventListener('click', async () => {
         const url = urlInput.value.trim();
@@ -17,7 +43,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         try {
-            showLoader();
+            showProgress();
             const response = await fetch('/analyze', {
                 method: 'POST',
                 headers: {
@@ -28,17 +54,58 @@ document.addEventListener('DOMContentLoaded', function() {
 
             const data = await response.json();
             if (response.ok) {
-                displayResults(data.images);
+                // Rozpocznij monitorowanie postępu
+                if (progressInterval) {
+                    clearInterval(progressInterval);
+                }
+                progressInterval = setInterval(() => {
+                    updateProgress(data.session_id)
+                        .then(progressData => {
+                            if (progressData.status === 'completed') {
+                                displayResults(data.images);
+                                hideProgress();
+                            }
+                        })
+                        .catch(error => {
+                            clearInterval(progressInterval);
+                            showError(error.message || 'Wystąpił błąd podczas analizy strony');
+                            hideProgress();
+                        });
+                }, 500);
             } else {
                 showError(data.error || 'Wystąpił błąd podczas analizy strony');
+                hideProgress();
             }
         } catch (error) {
             console.error('Error:', error);
             showError('Wystąpił błąd podczas komunikacji z serwerem');
-        } finally {
-            hideLoader();
+            hideProgress();
         }
     });
+
+    function showProgress() {
+        progressSection.classList.remove('d-none');
+        results.classList.add('d-none');
+        errorDiv.classList.add('d-none');
+        progressBar.style.width = '0%';
+        progressBar.setAttribute('aria-valuenow', 0);
+        progressStatus.textContent = 'Inicjalizacja...';
+    }
+
+    function hideProgress() {
+        progressSection.classList.add('d-none');
+        if (progressInterval) {
+            clearInterval(progressInterval);
+            progressInterval = null;
+        }
+    }
+
+    function showError(message) {
+        errorDiv.textContent = message;
+        errorDiv.classList.remove('d-none');
+        results.classList.add('d-none');
+        hideProgress();
+    }
 
     function showLoader() {
         loader.classList.remove('d-none');
@@ -48,12 +115,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function hideLoader() {
         loader.classList.add('d-none');
-    }
-
-    function showError(message) {
-        errorDiv.textContent = message;
-        errorDiv.classList.remove('d-none');
-        results.classList.add('d-none');
     }
 
     function displayResults(images) {
