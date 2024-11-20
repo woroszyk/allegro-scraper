@@ -113,7 +113,6 @@ def process_images(url, session_id):
                 time.sleep(1)
             except Exception as e:
                 print(f"Nie udało się zaakceptować cookies: {str(e)}")
-                # Spróbuj alternatywną metodę
                 try:
                     cookie_button = WebDriverWait(driver, 5).until(
                         EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'akceptuję')]"))
@@ -127,26 +126,65 @@ def process_images(url, session_id):
         update_progress(session_id, 'loading', 20, 'Ładowanie strony...')
         print(f"Ładowanie strony: {url}")
         driver.get(url)
-        time.sleep(3)
+        
+        # Czekamy na załadowanie głównych elementów
+        update_progress(session_id, 'waiting', 30, 'Czekanie na załadowanie elementów strony...')
+        try:
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.TAG_NAME, "img"))
+            )
+        except TimeoutException:
+            print("Timeout podczas oczekiwania na obrazy")
+        
+        # Dodatkowe oczekiwanie na dynamiczne elementy
+        time.sleep(5)
         
         # Przewijamy stronę
-        update_progress(session_id, 'scrolling', 30, 'Przewijanie strony w poszukiwaniu obrazów...')
+        update_progress(session_id, 'scrolling', 40, 'Przewijanie strony w poszukiwaniu obrazów...')
         print("Przewijanie strony...")
-        for i in range(3):
+        
+        # Przewijanie z większą liczbą powtórzeń i dłuższymi przerwami
+        last_height = driver.execute_script("return document.body.scrollHeight")
+        for i in range(5):  # Zwiększamy liczbę przewinięć
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-            time.sleep(1)
+            time.sleep(2)  # Dłuższe oczekiwanie
+            new_height = driver.execute_script("return document.body.scrollHeight")
+            if new_height == last_height:
+                break
+            last_height = new_height
+            
         driver.execute_script("window.scrollTo(0, 0);")
+        time.sleep(2)
         
-        # Zbieramy obrazy
-        update_progress(session_id, 'collecting', 40, 'Zbieranie elementów obrazów...')
+        # Zbieramy obrazy z różnych selektorów
+        update_progress(session_id, 'collecting', 50, 'Zbieranie elementów obrazów...')
         print("Zbieranie obrazów...")
-        img_elements = driver.find_elements(By.TAG_NAME, 'img')
-        total_images = len(img_elements)
-        print(f"Znaleziono {total_images} elementów img")
-        img_urls = set()
-
-        update_progress(session_id, 'processing', 50, f'Przetwarzanie {total_images} znalezionych obrazów...')
         
+        img_elements = []
+        
+        # Standardowe obrazy
+        img_elements.extend(driver.find_elements(By.TAG_NAME, 'img'))
+        
+        # Obrazy w tle (style background-image)
+        background_elements = driver.find_elements(By.XPATH, "//*[contains(@style, 'background-image')]")
+        
+        # Szukamy obrazów w różnych atrybutach
+        data_img_elements = driver.find_elements(By.XPATH, "//*[@data-src or @data-lazy or @data-original]")
+        
+        total_elements = len(img_elements) + len(background_elements) + len(data_img_elements)
+        print(f"Znaleziono {total_elements} potencjalnych elementów z obrazami")
+        
+        img_urls = set()
+        
+        def extract_url_from_style(style):
+            if not style:
+                return None
+            import re
+            match = re.search(r'url\(["\']?(.*?)["\']?\)', style)
+            if match:
+                return match.group(1)
+            return None
+            
         def normalize_url(url):
             if not url or url.startswith('data:'):
                 return None
@@ -159,37 +197,53 @@ def process_images(url, session_id):
                     return None
             return url.split('?')[0]
 
-        # Przetwarzanie obrazów z paskiem postępu
-        for i, img in enumerate(img_elements):
-            progress = 50 + (i / total_images * 25)  # Od 50% do 75%
-            update_progress(session_id, 'processing', progress, f'Przetwarzanie obrazu {i+1} z {total_images}...')
-            
+        update_progress(session_id, 'processing', 60, f'Przetwarzanie {total_elements} znalezionych elementów...')
+        
+        # Przetwarzanie standardowych obrazów
+        for img in img_elements:
             try:
-                src = img.get_attribute('src')
-                data_src = img.get_attribute('data-src')
-                data_original = img.get_attribute('data-original')
-                srcset = img.get_attribute('srcset')
-                data_srcset = img.get_attribute('data-srcset')
-                
-                for attr in [src, data_src, data_original]:
-                    if attr:
-                        normalized_url = normalize_url(attr)
+                for attr in ['src', 'data-src', 'data-lazy', 'data-original']:
+                    url = img.get_attribute(attr)
+                    if url:
+                        normalized_url = normalize_url(url)
                         if normalized_url:
                             img_urls.add(normalized_url)
                 
-                for srcset_attr in [srcset, data_srcset]:
-                    if srcset_attr:
-                        for srcset_url in srcset_attr.split(','):
-                            parts = srcset_url.strip().split(' ')
-                            if parts:
-                                normalized_url = normalize_url(parts[0])
-                                if normalized_url:
-                                    img_urls.add(normalized_url)
-                        
+                srcset = img.get_attribute('srcset')
+                if srcset:
+                    for srcset_url in srcset.split(','):
+                        parts = srcset_url.strip().split(' ')
+                        if parts:
+                            normalized_url = normalize_url(parts[0])
+                            if normalized_url:
+                                img_urls.add(normalized_url)
             except Exception as e:
                 print(f"Błąd podczas przetwarzania elementu img: {str(e)}")
-                continue
-        
+                
+        # Przetwarzanie obrazów w tle
+        for elem in background_elements:
+            try:
+                style = elem.get_attribute('style')
+                url = extract_url_from_style(style)
+                if url:
+                    normalized_url = normalize_url(url)
+                    if normalized_url:
+                        img_urls.add(normalized_url)
+            except Exception as e:
+                print(f"Błąd podczas przetwarzania elementu tła: {str(e)}")
+                
+        # Przetwarzanie elementów z data-atrybutami
+        for elem in data_img_elements:
+            try:
+                for attr in ['data-src', 'data-lazy', 'data-original']:
+                    url = elem.get_attribute(attr)
+                    if url:
+                        normalized_url = normalize_url(url)
+                        if normalized_url:
+                            img_urls.add(normalized_url)
+            except Exception as e:
+                print(f"Błąd podczas przetwarzania elementu data: {str(e)}")
+
         print(f"Znaleziono {len(img_urls)} unikalnych URL-i obrazów")
         
         # Pobieranie i analiza obrazów
