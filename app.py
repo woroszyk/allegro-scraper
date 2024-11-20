@@ -9,6 +9,8 @@ from webdriver_manager.core.os_manager import ChromeType
 from PIL import Image
 import io
 import os
+import subprocess
+import platform
 from urllib.parse import urljoin, urlparse
 import base64
 import tempfile
@@ -59,19 +61,38 @@ def get_driver():
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
     
-    if os.getenv('RENDER'):
-        # Konfiguracja dla Render
-        chrome_options.binary_location = '/usr/bin/chromium'
-        service = Service('/usr/bin/chromedriver')
-    else:
-        # Konfiguracja dla lokalnego środowiska
-        service = Service(ChromeDriverManager().install())
-    
     try:
+        if os.getenv('RENDER'):
+            # Sprawdź lokalizację chromium i chromedriver
+            chromium_path = subprocess.check_output(['which', 'chromium']).decode().strip()
+            chromedriver_path = subprocess.check_output(['which', 'chromedriver']).decode().strip()
+            
+            print(f"Chromium path: {chromium_path}")
+            print(f"ChromeDriver path: {chromedriver_path}")
+            
+            chrome_options.binary_location = chromium_path
+            service = Service(executable_path=chromedriver_path)
+        else:
+            # Lokalna konfiguracja
+            service = Service(ChromeDriverManager().install())
+        
         driver = webdriver.Chrome(service=service, options=chrome_options)
         return driver
     except Exception as e:
         print(f"Błąd podczas inicjalizacji Chrome: {str(e)}")
+        if os.getenv('RENDER'):
+            # Dodatkowe informacje diagnostyczne
+            try:
+                print("Zawartość /usr/bin:")
+                print(subprocess.check_output(['ls', '-l', '/usr/bin']).decode())
+                
+                print("\nWersja Chromium:")
+                print(subprocess.check_output(['chromium', '--version']).decode())
+                
+                print("\nWersja ChromeDriver:")
+                print(subprocess.check_output(['chromedriver', '--version']).decode())
+            except Exception as debug_e:
+                print(f"Błąd podczas zbierania informacji diagnostycznych: {str(debug_e)}")
         raise
 
 def process_images(url):
