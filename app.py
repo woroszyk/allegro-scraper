@@ -5,6 +5,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.core.os_manager import ChromeType
 from PIL import Image
 import io
 import os
@@ -56,14 +57,22 @@ def get_driver():
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
-    chrome_options.add_argument('--disable-software-rasterizer')
-    chrome_options.add_argument('--remote-debugging-port=9222')
     chrome_options.add_argument('--window-size=1920,1080')
-    chrome_options.binary_location = os.getenv('CHROME_BIN', '/usr/bin/chromium')
     
-    service = Service(executable_path=os.getenv('CHROMEDRIVER_PATH', '/usr/bin/chromedriver'))
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    return driver
+    if os.getenv('RENDER'):
+        # Konfiguracja dla Render
+        chrome_options.binary_location = '/usr/bin/chromium'
+        service = Service('/usr/bin/chromedriver')
+    else:
+        # Konfiguracja dla lokalnego środowiska
+        service = Service(ChromeDriverManager().install())
+    
+    try:
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        return driver
+    except Exception as e:
+        print(f"Błąd podczas inicjalizacji Chrome: {str(e)}")
+        raise
 
 def process_images(url):
     driver = get_driver()
