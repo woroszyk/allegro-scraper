@@ -1,0 +1,217 @@
+:root {
+    --primary-color: #2563eb;
+    --secondary-color: #1e40af;
+    --background-color: #f8fafc;
+    --text-color: #1e293b;
+    --border-color: #e2e8f0;
+}
+
+body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
+
+.gradient-header {
+    background: linear-gradient(135deg, #3b82f6 0%, #1e40af 100%);
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+}
+
+.gradient-header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    color: white;
+}
+
+.gradient-header .lead {
+    font-size: 1.25rem;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.logo {
+    height: 80px;
+    width: auto;
+    transition: transform 0.3s ease;
+    display: block;
+    margin: 0 auto;
+    object-fit: contain;
+}
+
+.logo:hover {
+    transform: scale(1.05);
+}
+
+.url-input-section {
+    background: white;
+    padding: 2rem;
+    border-radius: 1rem;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    margin-bottom: 2rem;
+}
+
+.input-group {
+    gap: 0.5rem;
+}
+
+.form-control {
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    transition: border-color 0.15s ease-in-out;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.btn {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+    background-color: var(--secondary-color);
+    border-color: var(--secondary-color);
+}
+
+.btn-success {
+    background-color: #059669;
+    border-color: #059669;
+}
+
+.btn-success:hover {
+    background-color: #047857;
+    border-color: #047857;
+}
+
+#imageGallery {
+    margin-top: 2rem;
+}
+
+.image-card {
+    background: white;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    transition: transform 0.2s ease-in-out;
+    height: 100%;
+}
+
+.image-card:hover {
+    transform: translateY(-4px);
+}
+
+.image-preview {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+}
+
+.image-info {
+    padding: 1rem;
+}
+
+.image-checkbox {
+    margin-right: 0.5rem;
+}
+
+.footer {
+    background-color: white;
+    border-top: 1px solid var(--border-color);
+    padding: 1.5rem 0;
+    margin-top: 4rem;
+}
+
+.footer p {
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+#loader {
+    margin: 2rem 0;
+}
+
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+.alert {
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-select {
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    background-color: white;
+    transition: border-color 0.15s ease-in-out;
+    padding-right: 2.5rem !important; /* Więcej miejsca na strzałkę */
+    min-width: 200px; /* Minimalna szerokość */
+    background-position: right 0.75rem center; /* Pozycja strzałki */
+}
+
+.form-select option {
+    padding: 8px 12px;
+}
+
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* Kontener dla przycisków */
+.results-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: center;
+}
+
+@media (max-width: 768px) {
+    .form-select {
+        width: 100%;
+        min-width: auto;
+    }
+    
+    .results-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .results-controls .btn,
+    .results-controls .form-select {
+        width: 100%;
+    }
+}
+
+.image-checkbox {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    transform: scale(1.5);
+}
+
+.image-info {
+    font-size: 0.9rem;
+}
+
+.selected {
+    border: 3px solid #007bff;
+}
