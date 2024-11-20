@@ -90,32 +90,52 @@ def process_images(url):
             driver.get('https://allegro.pl')
             time.sleep(2)
             try:
-                cookie_button = driver.find_element(By.ID, 'opbox-gdpr-consents-modal').find_element(By.XPATH, './/button[contains(text(), "akceptuję")]')
+                # Nowa metoda akceptacji cookies
+                cookie_button = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.XPATH, "//button[contains(@data-role, 'accept-consent')]"))
+                )
                 cookie_button.click()
                 time.sleep(1)
             except Exception as e:
                 print(f"Nie udało się zaakceptować cookies: {str(e)}")
+                # Spróbuj alternatywną metodę
+                try:
+                    cookie_button = WebDriverWait(driver, 5).until(
+                        EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'akceptuję')]"))
+                    )
+                    cookie_button.click()
+                    time.sleep(1)
+                except Exception as e2:
+                    print(f"Nie udało się zaakceptować cookies alternatywną metodą: {str(e2)}")
         
         # Ładujemy stronę
+        print(f"Ładowanie strony: {url}")
         driver.get(url)
         time.sleep(3)
         
         # Przewijamy stronę kilka razy
-        for _ in range(3):
+        print("Przewijanie strony...")
+        for i in range(3):
             driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
             time.sleep(1)
         driver.execute_script("window.scrollTo(0, 0);")
         
         # Zbieramy wszystkie obrazy
+        print("Zbieranie obrazów...")
         img_elements = driver.find_elements(By.TAG_NAME, 'img')
+        print(f"Znaleziono {len(img_elements)} elementów img")
         img_urls = set()  # Używamy set() zamiast listy, aby uniknąć duplikatów
         
         def normalize_url(url):
             if not url or url.startswith('data:'):
                 return None
             if not url.startswith(('http://', 'https://')):
-                base_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url))
-                url = urljoin(base_url, url)
+                try:
+                    base_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(driver.current_url))
+                    url = urljoin(base_url, url)
+                except Exception as e:
+                    print(f"Błąd podczas normalizacji URL: {str(e)}")
+                    return None
             return url.split('?')[0]  # Usuwamy parametry URL
         
         for img in img_elements:
@@ -125,34 +145,29 @@ def process_images(url):
                 data_src = img.get_attribute('data-src')
                 data_original = img.get_attribute('data-original')
                 srcset = img.get_attribute('srcset')
+                data_srcset = img.get_attribute('data-srcset')
                 
-                if src:
-                    normalized_url = normalize_url(src)
-                    if normalized_url:
-                        img_urls.add(normalized_url)
-                        
-                if data_src:
-                    normalized_url = normalize_url(data_src)
-                    if normalized_url:
-                        img_urls.add(normalized_url)
-                        
-                if data_original:
-                    normalized_url = normalize_url(data_original)
-                    if normalized_url:
-                        img_urls.add(normalized_url)
+                for attr in [src, data_src, data_original]:
+                    if attr:
+                        normalized_url = normalize_url(attr)
+                        if normalized_url:
+                            img_urls.add(normalized_url)
                 
-                # Obsługa srcset
-                if srcset:
-                    for srcset_url in srcset.split(','):
-                        parts = srcset_url.strip().split(' ')
-                        if parts:
-                            normalized_url = normalize_url(parts[0])
-                            if normalized_url:
-                                img_urls.add(normalized_url)
+                # Obsługa srcset i data-srcset
+                for srcset_attr in [srcset, data_srcset]:
+                    if srcset_attr:
+                        for srcset_url in srcset_attr.split(','):
+                            parts = srcset_url.strip().split(' ')
+                            if parts:
+                                normalized_url = normalize_url(parts[0])
+                                if normalized_url:
+                                    img_urls.add(normalized_url)
                         
             except Exception as e:
                 print(f"Błąd podczas przetwarzania elementu img: {str(e)}")
                 continue
+        
+        print(f"Znaleziono {len(img_urls)} unikalnych URL-i obrazów")
     
     except Exception as e:
         print(f"Błąd podczas przetwarzania strony: {str(e)}")
@@ -166,6 +181,7 @@ def process_images(url):
     
     # Przetwarzamy znalezione URL-e
     results = []
+    print("Przetwarzanie znalezionych obrazów...")
     for img_url in img_urls:
         try:
             result = get_image_info(img_url)
@@ -175,6 +191,7 @@ def process_images(url):
             print(f"Błąd podczas przetwarzania URL-a {img_url}: {str(e)}")
             continue
     
+    print(f"Pomyślnie przetworzono {len(results)} obrazów")
     return results
 
 @app.route('/')
